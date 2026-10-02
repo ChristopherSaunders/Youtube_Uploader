@@ -1,0 +1,23 @@
+{
+  "name": "youtube-uploader",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Simple browser app for uploading videos to your YouTube channels",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "keygen": "node scripts/keygen.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "googleapis": "^182.0.0"
+  }
+}

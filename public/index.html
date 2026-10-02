@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Uploader</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">▶</span>
+      <span>YouTube Uploader</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="flash" class="flash" role="status" hidden></div>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Your channels</h2>
+          <p class="muted">Connect each YouTube channel you want to upload to.</p>
+        </div>
+        <a class="button primary" href="/auth/google">+ Connect a channel</a>
+      </div>
+
+      <ul id="accounts" class="accounts" aria-live="polite"></ul>
+      <p id="accounts-empty" class="empty" hidden>
+        No channels connected yet. Click <strong>Connect a channel</strong> and sign in with Google.
+      </p>
+    </section>
+
+    <section class="card disabled">
+      <h2>Upload a video</h2>
+      <p class="muted">Coming next: pick a channel, choose a file, add a title and upload.</p>
+    </section>
+  </main>
+
+  <template id="account-template">
+    <li class="account">
+      <div class="avatar" aria-hidden="true"></div>
+      <div class="account-info">
+        <div class="account-title"></div>
+        <div class="account-handle muted"></div>
+      </div>
+      <button class="button ghost danger" type="button">Disconnect</button>
+    </li>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>

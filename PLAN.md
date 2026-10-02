@@ -47,20 +47,20 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 ## 3. Phases
 
 ### Phase 0 — Google Cloud setup (no code, ~30 min)
-- [ ] Create a project at console.cloud.google.com
-- [ ] Enable **YouTube Data API v3**
-- [ ] Configure the **OAuth consent screen** (External, add yourself as a test user)
-- [ ] Add scopes: `youtube.upload` and `youtube.readonly` (to show channel name/avatar)
-- [ ] Create an **OAuth Client ID** (type: Web application)
+- [x] Create a project at console.cloud.google.com
+- [x] Enable **YouTube Data API v3**
+- [x] Configure the **OAuth consent screen** (External, add yourself as a test user)
+- [x] Add scopes: `youtube.upload` and `youtube.readonly` (to show channel name/avatar)
+- [x] Create an **OAuth Client ID** (type: Web application)
   - Authorized redirect URI: `http://localhost:3000/auth/callback`
-- [ ] Copy Client ID + Secret into a local `.env` (never commit it)
+- [x] Copy Client ID + Secret into a local `.env` (never commit it)
 
 **Done when:** you have a `.env` with `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 `SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY`.
 
 ### Phase 1 — Project skeleton
-- [ ] `npm init`, install `express googleapis express-session dotenv busboy`
-- [ ] Folder layout:
+- [x] `npm init`, install `express googleapis express-session dotenv better-sqlite3`
+- [x] Folder layout:
   ```
   src/
     server.js          # Express app, routes
@@ -75,12 +75,12 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
     app.js
   .env.example
   ```
-- [ ] `npm start` serves `public/` on http://localhost:3000
+- [x] `npm start` serves `public/` on http://localhost:3000
 
 **Done when:** a blank styled page loads.
 
 ### Phase 2 — Connect accounts (OAuth)
-- [ ] Multi-user-ready data model from day one:
+- [x] Multi-user-ready data model from day one:
   ```
   users     (id, google_sub, email, name, created_at)
   accounts  (id, user_id → users.id, channel_id, channel_title, thumbnail,
@@ -89,16 +89,16 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
   ```
   Every query filters by `user_id`. Locally there is just one user (you), but
   nothing has to be rewritten when other people arrive.
-- [ ] `requireUser` middleware: locally (`APP_MODE=local`) it auto-signs-in the
+- [x] `requireUser` middleware: locally (`APP_MODE=local`) it auto-signs-in the
       single owner user; hosted (`APP_MODE=hosted`) it requires a real login
-- [ ] `GET /auth/google` → redirect to Google with `access_type=offline`,
+- [x] `GET /auth/google` → redirect to Google with `access_type=offline`,
       `prompt=consent select_account` (forces account picker + refresh token)
-- [ ] `GET /auth/callback` → exchange code for tokens, call `channels.list?mine=true`
+- [x] `GET /auth/callback` → exchange code for tokens, call `channels.list?mine=true`
       to get channel id/title/thumbnail, save account
-- [ ] Encrypt refresh tokens at rest (AES-256-GCM with `TOKEN_ENCRYPTION_KEY`)
-- [ ] `GET /api/accounts` → list connected channels (no tokens sent to browser)
-- [ ] `DELETE /api/accounts/:id` → disconnect (and revoke token with Google)
-- [ ] Use a `state` parameter to prevent CSRF on the callback
+- [x] Encrypt refresh tokens at rest (AES-256-GCM with `TOKEN_ENCRYPTION_KEY`)
+- [x] `GET /api/accounts` → list connected channels (no tokens sent to browser)
+- [x] `DELETE /api/accounts/:id` → disconnect (and revoke token with Google)
+- [x] Use a `state` parameter to prevent CSRF on the callback
 
 **Done when:** you can connect 2+ accounts and see them listed with avatars.
 
