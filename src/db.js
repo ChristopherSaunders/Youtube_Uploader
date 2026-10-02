@@ -2,14 +2,14 @@
 // upload belongs to a user, and every query filters by user_id.
 import fs from 'node:fs';
 import path from 'node:path';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import config from './config.js';
 
 fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
 
-const db = new Database(config.databasePath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+// Node's built-in SQLite: nothing to compile, works the same on Windows/Mac/Linux.
+const db = new DatabaseSync(config.databasePath);
+db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (

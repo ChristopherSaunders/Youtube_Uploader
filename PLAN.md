@@ -33,12 +33,12 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 
 | Layer      | Choice                                   | Why                                   |
 |------------|------------------------------------------|---------------------------------------|
-| Runtime    | Node.js 20+                              | Native fetch, stable streams          |
+| Runtime    | Node.js 22.13+                           | Built-in SQLite, native fetch         |
 | Server     | Express                                  | Minimal, well known                   |
 | Google API | `googleapis` (official client)           | Handles OAuth + resumable uploads     |
 | Sessions   | `express-session`                        | Track who's using the app             |
 | File intake| `busboy` (or `multer` with disk storage) | Stream large files, don't buffer in RAM |
-| Storage    | SQLite (`better-sqlite3`)                | Users + connected accounts + tokens; easy to move to Postgres when hosted |
+| Storage    | SQLite (built-in `node:sqlite`)          | Users + connected accounts + tokens; easy to move to Postgres when hosted |
 | Frontend   | Plain HTML + CSS + vanilla JS            | "Simple and clean", no build step     |
 | Progress   | Server-Sent Events (SSE)                 | Push YouTube upload % to the browser  |
 
@@ -59,7 +59,7 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 `SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY`.
 
 ### Phase 1 — Project skeleton
-- [x] `npm init`, install `express googleapis express-session dotenv better-sqlite3`
+- [x] `npm init`, install `express googleapis express-session dotenv` (SQLite is built into Node)
 - [x] Folder layout:
   ```
   src/

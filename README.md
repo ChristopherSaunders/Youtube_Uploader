@@ -5,7 +5,7 @@ See [PLAN.md](PLAN.md) for the full game plan.
 
 ## Setup
 
-Requires [Node.js](https://nodejs.org) 20 or newer, and the Google Cloud project
+Requires [Node.js](https://nodejs.org) 22.13 or newer, and the Google Cloud project
 from Phase 0 of the plan (YouTube Data API v3 enabled, OAuth client created with
 redirect URI `http://localhost:3000/auth/callback`).
 
