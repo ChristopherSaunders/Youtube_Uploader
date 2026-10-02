@@ -117,7 +117,7 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 - [x] Two-stage progress bar: browser → server (XHR `upload.onprogress`),
       then server → YouTube (polled, fed by `onUploadProgress`)
 - [x] Drag-and-drop file zone, file size/type validation
-- [ ] Optional custom thumbnail (`thumbnails.set`)
+- [x] Optional custom thumbnail (`thumbnails.set`; needs a verified channel)
 - [x] Clear error messages (quota exceeded, token revoked → "reconnect account")
 - [x] Upload history list (last 10 uploads)
 

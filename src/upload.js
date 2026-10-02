@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import busboy from 'busboy';
 import { google } from 'googleapis';
@@ -19,6 +20,8 @@ const VIDEO_EXTENSIONS = new Set([
   '.mp4', '.mov', '.m4v', '.mkv', '.avi', '.wmv', '.flv', '.webm', '.mpg', '.mpeg', '.3gp', '.mts',
 ]);
 const PRIVACY_OPTIONS = ['private', 'unlisted', 'public'];
+const THUMBNAIL_TYPES = ['image/jpeg', 'image/png'];
+const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024; // YouTube's limit
 
 export function httpError(status, message) {
   return Object.assign(new Error(message), { status });
@@ -29,13 +32,14 @@ function isVideo(filename, mimeType) {
 }
 
 // Streams the multipart form to disk so large videos never sit in memory.
+// The optional thumbnail is small (2 MB max), so it is kept in memory.
 export function receiveUpload(req) {
   return new Promise((resolve, reject) => {
     let parser;
     try {
       parser = busboy({
         headers: req.headers,
-        limits: { files: 1, fileSize: config.maxUploadBytes, fields: 20, fieldSize: 10_000 },
+        limits: { files: 2, fileSize: config.maxUploadBytes, fields: 20, fieldSize: 10_000 },
       });
     } catch {
       return reject(httpError(400, 'Expected a video upload.'));
@@ -43,7 +47,9 @@ export function receiveUpload(req) {
 
     const fields = {};
     let file = null;
+    let thumbnail = null;
     let writeDone = Promise.resolve();
+    let thumbnailDone = Promise.resolve();
     let rejection = null;
     let settled = false;
 
@@ -60,7 +66,31 @@ export function receiveUpload(req) {
       fields[name] = value;
     });
 
+    const receiveThumbnail = (stream, info) => {
+      if (!THUMBNAIL_TYPES.includes(info.mimeType)) {
+        rejection = httpError(400, 'Thumbnails must be JPG or PNG images.');
+        return stream.resume();
+      }
+      const chunks = [];
+      let size = 0;
+      stream.on('data', (chunk) => {
+        size += chunk.length;
+        if (size <= MAX_THUMBNAIL_BYTES) chunks.push(chunk);
+      });
+      thumbnailDone = new Promise((done) => {
+        stream.on('end', () => {
+          if (size > MAX_THUMBNAIL_BYTES) {
+            rejection = httpError(413, 'Thumbnails can be at most 2 MB.');
+          } else if (size > 0) {
+            thumbnail = { buffer: Buffer.concat(chunks), mimeType: info.mimeType };
+          }
+          done();
+        });
+      });
+    };
+
     parser.on('file', (name, stream, info) => {
+      if (name === 'thumbnail' && !thumbnail) return receiveThumbnail(stream, info);
       if (name !== 'video' || file) return stream.resume();
       if (!isVideo(info.filename, info.mimeType)) {
         rejection = httpError(400, 'That file does not look like a video.');
@@ -86,14 +116,14 @@ export function receiveUpload(req) {
 
     parser.on('close', async () => {
       try {
-        await writeDone;
+        await Promise.all([writeDone, thumbnailDone]);
       } catch {
         return fail(httpError(400, 'The upload was interrupted.'));
       }
       if (rejection) return fail(rejection);
       if (!file || file.size === 0) return fail(httpError(400, 'Choose a video file.'));
       settled = true;
-      resolve({ fields, file });
+      resolve({ fields, file, thumbnail });
     });
 
     req.pipe(parser);
@@ -156,6 +186,23 @@ function friendlyYouTubeError(err) {
   }
 }
 
+function friendlyThumbnailError(err) {
+  const data = err.response?.data;
+  const reason = err.errors?.[0]?.reason || data?.error?.errors?.[0]?.reason;
+  const prefix = 'The video uploaded, but the thumbnail did not:';
+  switch (reason) {
+    case 'forbidden':
+      return `${prefix} this channel needs to be verified for custom thumbnails. ` +
+        'Verify it at youtube.com/verify, then add the thumbnail in YouTube Studio.';
+    case 'invalidImage':
+      return `${prefix} YouTube could not read the image. Try a different JPG or PNG.`;
+    case 'uploadRateLimitExceeded':
+      return `${prefix} too many thumbnail changes recently. Add it in YouTube Studio later.`;
+    default:
+      return `${prefix} ${data?.error?.message || err.message}`;
+  }
+}
+
 // In-progress uploads, kept in memory for the browser to poll. Finished
 // results are also saved in the uploads table.
 const jobs = new Map();
@@ -165,7 +212,7 @@ export function getJob(userId, uploadId) {
   return job && job.userId === userId ? job : null;
 }
 
-export function startYouTubeUpload(user, account, details, file) {
+export function startYouTubeUpload(user, account, details, file, thumbnail) {
   const { lastInsertRowid } = db
     .prepare("INSERT INTO uploads (user_id, account_id, title, status) VALUES (?, ?, ?, 'uploading')")
     .run(user.id, account.id, details.title);
@@ -180,24 +227,22 @@ export function startYouTubeUpload(user, account, details, file) {
     videoId: null,
     privacy: null,
     error: null,
+    warning: null,
   };
   jobs.set(uploadId, job);
 
-  sendToYouTube(job, account, details, file).finally(() => {
+  sendToYouTube(job, account, details, file, thumbnail).finally(() => {
     fs.rm(file.path, { force: true }, () => {});
-    db.prepare('UPDATE uploads SET status = ?, video_id = ?, error = ? WHERE id = ?').run(
-      job.status,
-      job.videoId,
-      job.error,
-      job.id,
-    );
+    db.prepare(
+      'UPDATE uploads SET status = ?, video_id = ?, error = ?, warning = ? WHERE id = ?',
+    ).run(job.status, job.videoId, job.error, job.warning, job.id);
     setTimeout(() => jobs.delete(uploadId), 60 * 60 * 1000);
   });
 
   return job;
 }
 
-async function sendToYouTube(job, account, details, file) {
+async function sendToYouTube(job, account, details, file, thumbnail) {
   const youtube = google.youtube({ version: 'v3', auth: getAuthorizedClient(account) });
   try {
     const { data } = await youtube.videos.insert(
@@ -227,7 +272,6 @@ async function sendToYouTube(job, account, details, file) {
         },
       },
     );
-    job.status = 'done';
     job.bytesSent = job.totalBytes;
     job.videoId = data.id;
     job.privacy = data.status?.privacyStatus || details.privacy;
@@ -235,13 +279,29 @@ async function sendToYouTube(job, account, details, file) {
     console.error('YouTube upload failed:', err.response?.data || err.message);
     job.status = 'error';
     job.error = friendlyYouTubeError(err);
+    return;
   }
+
+  // A thumbnail problem shouldn't count as a failed upload: the video is up.
+  if (thumbnail) {
+    job.status = 'thumbnail';
+    try {
+      await youtube.thumbnails.set({
+        videoId: job.videoId,
+        media: { mimeType: thumbnail.mimeType, body: Readable.from([thumbnail.buffer]) },
+      });
+    } catch (err) {
+      console.error('Thumbnail upload failed:', err.response?.data || err.message);
+      job.warning = friendlyThumbnailError(err);
+    }
+  }
+  job.status = 'done';
 }
 
 export function listRecentUploads(userId) {
   return db
     .prepare(
-      `SELECT u.id, u.title, u.status, u.video_id, u.error, u.created_at,
+      `SELECT u.id, u.title, u.status, u.video_id, u.error, u.warning, u.created_at,
               a.channel_title
          FROM uploads u
          LEFT JOIN accounts a ON a.id = u.account_id

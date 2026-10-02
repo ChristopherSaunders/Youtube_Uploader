@@ -16,6 +16,10 @@ const titleCount = $('title-count');
 const progressPanel = $('progress');
 const result = $('result');
 
+const thumbInput = $('thumbnail');
+const thumbPicker = $('thumb-picker');
+const thumbPreview = $('thumb-preview');
+
 let uploading = false;
 
 function showFlash(type, message) {
@@ -136,6 +140,38 @@ dropzone.addEventListener('drop', (event) => {
   }
 });
 
+function showChosenThumbnail() {
+  const image = thumbInput.files[0];
+  if (thumbPreview.src) URL.revokeObjectURL(thumbPreview.src);
+  thumbPreview.hidden = !image;
+  $('thumb-placeholder').hidden = Boolean(image);
+  $('thumb-remove').hidden = !image;
+  thumbPicker.classList.toggle('has-image', Boolean(image));
+  if (image) thumbPreview.src = URL.createObjectURL(image);
+  else thumbPreview.removeAttribute('src');
+}
+
+thumbInput.addEventListener('change', () => {
+  const image = thumbInput.files[0];
+  const problem = image && thumbnailProblem(image);
+  if (problem) {
+    thumbInput.value = '';
+    showFlash('error', problem);
+  }
+  showChosenThumbnail();
+});
+
+$('thumb-remove').addEventListener('click', () => {
+  thumbInput.value = '';
+  showChosenThumbnail();
+});
+
+function thumbnailProblem(image) {
+  if (!['image/jpeg', 'image/png'].includes(image.type)) return 'Thumbnails must be JPG or PNG images.';
+  if (image.size > 2 * 1024 * 1024) return `That thumbnail is ${formatBytes(image.size)}; YouTube allows up to 2 MB.`;
+  return null;
+}
+
 function updateTitleCount() {
   const length = titleInput.value.length;
   titleCount.textContent = `${length} / 100`;
@@ -196,6 +232,11 @@ async function waitForYouTube(uploadId) {
     const job = await api(`/uploads/${uploadId}`);
     if (job.status === 'done') return job;
     if (job.status === 'error') throw new Error(job.error);
+    if (job.status === 'thumbnail') {
+      setProgress('Step 2 of 2 · Setting the thumbnail…', 1);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      continue;
+    }
     const fraction = job.totalBytes ? job.bytesSent / job.totalBytes : 0;
     setProgress(
       'Step 2 of 2 · Uploading to YouTube…',
@@ -221,6 +262,7 @@ form.addEventListener('submit', async (event) => {
   }
   formData.append('madeForKids', form.querySelector('input[name="madeForKids"]:checked').value);
   formData.append('notifySubscribers', String($('notifySubscribers').checked));
+  if (thumbInput.files[0]) formData.append('thumbnail', thumbInput.files[0]);
   formData.append('video', fileInput.files[0]);
 
   uploading = true;
@@ -255,6 +297,8 @@ function showResult(job) {
       ? ' It is private for now. Change the visibility in YouTube Studio when you are ready.'
       : '';
   $('result-text').textContent = `Uploaded! YouTube is now processing your video.${privacyNote}`;
+  $('result-warning').textContent = job.warning || '';
+  $('result-warning').hidden = !job.warning;
   $('result-watch').href = `https://youtu.be/${job.videoId}`;
   $('result-studio').href = `https://studio.youtube.com/video/${job.videoId}/edit`;
 }
@@ -265,6 +309,7 @@ $('upload-another').addEventListener('click', () => {
   form.reset();
   accountSelect.value = keepChannel;
   showChosenFile();
+  showChosenThumbnail();
   updateTitleCount();
   form.hidden = false;
 });
@@ -296,12 +341,16 @@ async function loadHistory() {
         }
         const meta = document.createElement('div');
         meta.className = 'muted small';
-        meta.textContent = [upload.channel_title, upload.error].filter(Boolean).join(' · ');
+        meta.textContent = [upload.channel_title, upload.error, upload.warning]
+          .filter(Boolean)
+          .join(' · ');
         main.append(title, meta);
 
         const status = document.createElement('span');
-        status.className = `status ${upload.status}`;
-        status.textContent = STATUS_LABELS[upload.status] || upload.status;
+        status.className = `status ${upload.warning ? 'warning' : upload.status}`;
+        status.textContent = upload.warning
+          ? 'Uploaded, no thumbnail'
+          : STATUS_LABELS[upload.status] || upload.status;
         item.append(main, status);
         return item;
       }),

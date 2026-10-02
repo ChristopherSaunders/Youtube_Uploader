@@ -42,12 +42,12 @@ router.delete('/accounts/:id', async (req, res) => {
 });
 
 router.post('/uploads', async (req, res) => {
-  const { fields, file } = await receiveUpload(req);
+  const { fields, file, thumbnail } = await receiveUpload(req);
   try {
     const details = parseVideoDetails(fields);
     const account = getAccountWithToken(req.user.id, Number(fields.accountId));
     if (!account) throw httpError(400, 'Choose a connected channel.');
-    const job = startYouTubeUpload(req.user, account, details, file);
+    const job = startYouTubeUpload(req.user, account, details, file, thumbnail);
     res.status(202).json(job);
   } catch (err) {
     fs.rm(file.path, { force: true }, () => {});

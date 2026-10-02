@@ -62,6 +62,22 @@
         </div>
 
         <div class="field">
+          <span class="field-label">Thumbnail <span class="muted">(optional)</span></span>
+          <div class="thumb-row">
+            <label class="thumb-picker" id="thumb-picker">
+              <input type="file" id="thumbnail" accept="image/jpeg,image/png">
+              <img id="thumb-preview" alt="Thumbnail preview" hidden>
+              <span id="thumb-placeholder">Choose image</span>
+            </label>
+            <div class="thumb-help">
+              <p class="muted small">JPG or PNG, up to 2 MB. 1280×720 looks best.
+                Custom thumbnails need a <a href="https://www.youtube.com/verify" target="_blank" rel="noopener">verified channel</a>.</p>
+              <button class="button ghost small-button" type="button" id="thumb-remove" hidden>Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
           <label for="tags">Tags <span class="muted">(comma separated)</span></label>
           <input type="text" id="tags" name="tags" placeholder="podcast, interview, comedy">
         </div>
@@ -123,6 +139,7 @@
 
       <div id="result" class="result" hidden>
         <p id="result-text"></p>
+        <p id="result-warning" class="result-warning" hidden></p>
         <div class="result-actions">
           <a class="button primary" id="result-watch" target="_blank" rel="noopener">Open on YouTube</a>
           <a class="button ghost" id="result-studio" target="_blank" rel="noopener">Edit in YouTube Studio</a>

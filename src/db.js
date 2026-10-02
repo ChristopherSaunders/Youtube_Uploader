@@ -42,8 +42,13 @@ db.exec(`
     title       TEXT NOT NULL,
     status      TEXT NOT NULL,
     error       TEXT,
+    warning     TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
+
+// Columns added after the first release, for databases created before them.
+const uploadColumns = db.prepare('PRAGMA table_info(uploads)').all().map((column) => column.name);
+if (!uploadColumns.includes('warning')) db.exec('ALTER TABLE uploads ADD COLUMN warning TEXT');
 
 export default db;
