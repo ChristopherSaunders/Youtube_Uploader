@@ -1,0 +1,153 @@
+# YouTube Uploader — Game Plan
+
+A simple, clean browser app (Node.js backend) that uploads videos to any YouTube
+account the user can sign in to.
+
+---
+
+## 1. How it works (the big picture)
+
+```
+ Browser (HTML/CSS/JS)          Node.js server (Express)            Google
+ ─────────────────────          ────────────────────────            ──────
+ "Add account" button  ───────▶ /auth/google  ──── redirect ──────▶ OAuth consent
+                                /auth/callback ◀── code ─────────── (user signs in,
+                                  stores refresh token per account   picks channel)
+ Pick account, choose file,
+ title, description, privacy ─▶ /api/upload  ── resumable upload ─▶ YouTube Data API v3
+ Progress bar ◀── progress events (SSE) ──┘                          videos.insert
+```
+
+**Key rule:** the app never asks for or stores YouTube passwords. "Credentials"
+means the user signs in through Google's OAuth consent screen, and the app keeps
+a *refresh token* per connected account. That is the only way Google allows
+third-party uploads, and it's what lets one app manage many accounts/channels.
+
+---
+
+## 2. Tech stack
+
+| Layer      | Choice                                   | Why                                   |
+|------------|------------------------------------------|---------------------------------------|
+| Runtime    | Node.js 20+                              | Native fetch, stable streams          |
+| Server     | Express                                  | Minimal, well known                   |
+| Google API | `googleapis` (official client)           | Handles OAuth + resumable uploads     |
+| Sessions   | `express-session`                        | Track who's using the app             |
+| File intake| `busboy` (or `multer` with disk storage) | Stream large files, don't buffer in RAM |
+| Storage    | SQLite (`better-sqlite3`) or JSON file   | Store connected accounts + tokens     |
+| Frontend   | Plain HTML + CSS + vanilla JS            | "Simple and clean", no build step     |
+| Progress   | Server-Sent Events (SSE)                 | Push YouTube upload % to the browser  |
+
+---
+
+## 3. Phases
+
+### Phase 0 — Google Cloud setup (no code, ~30 min)
+- [ ] Create a project at console.cloud.google.com
+- [ ] Enable **YouTube Data API v3**
+- [ ] Configure the **OAuth consent screen** (External, add yourself as a test user)
+- [ ] Add scopes: `youtube.upload` and `youtube.readonly` (to show channel name/avatar)
+- [ ] Create an **OAuth Client ID** (type: Web application)
+  - Authorized redirect URI: `http://localhost:3000/auth/callback`
+- [ ] Copy Client ID + Secret into a local `.env` (never commit it)
+
+**Done when:** you have a `.env` with `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY`.
+
+### Phase 1 — Project skeleton
+- [ ] `npm init`, install `express googleapis express-session dotenv busboy`
+- [ ] Folder layout:
+  ```
+  src/
+    server.js          # Express app, routes
+    auth.js            # OAuth flow, token refresh
+    accounts.js        # Load/save connected accounts (encrypted tokens)
+    upload.js          # Streams file → YouTube resumable upload
+  public/
+    index.html
+    styles.css
+    app.js
+  .env.example
+  ```
+- [ ] `npm start` serves `public/` on http://localhost:3000
+
+**Done when:** a blank styled page loads.
+
+### Phase 2 — Connect accounts (OAuth)
+- [ ] `GET /auth/google` → redirect to Google with `access_type=offline`,
+      `prompt=consent select_account` (forces account picker + refresh token)
+- [ ] `GET /auth/callback` → exchange code for tokens, call `channels.list?mine=true`
+      to get channel id/title/thumbnail, save account
+- [ ] Encrypt refresh tokens at rest (AES-256-GCM with `TOKEN_ENCRYPTION_KEY`)
+- [ ] `GET /api/accounts` → list connected channels (no tokens sent to browser)
+- [ ] `DELETE /api/accounts/:id` → disconnect (and revoke token with Google)
+- [ ] Use a `state` parameter to prevent CSRF on the callback
+
+**Done when:** you can connect 2+ accounts and see them listed with avatars.
+
+### Phase 3 — Upload a video
+- [ ] Upload form: account picker, file, title, description, tags, privacy
+      (private / unlisted / public), "made for kids" toggle, optional category
+- [ ] `POST /api/upload` streams the file to a temp file on disk (not RAM)
+- [ ] Server calls `youtube.videos.insert` with `part=snippet,status` and a
+      **resumable** media upload using the chosen account's credentials
+- [ ] Return the new video ID + link `https://youtu.be/<id>`
+- [ ] Delete the temp file when finished (success or failure)
+
+**Done when:** a test video lands on the chosen channel.
+
+### Phase 4 — Progress & polish
+- [ ] Two-stage progress bar: browser → server (XHR `upload.onprogress`),
+      then server → YouTube (SSE fed by `onUploadProgress`)
+- [ ] Drag-and-drop file zone, file size/type validation
+- [ ] Optional custom thumbnail (`thumbnails.set`)
+- [ ] Clear error messages (quota exceeded, token revoked → "reconnect account")
+- [ ] Upload history list (last N uploads per account)
+
+**Done when:** it feels good to use and failures explain themselves.
+
+### Phase 5 — Hardening (before anyone else uses it)
+- [ ] Limit max file size; validate MIME type
+- [ ] Rate-limit upload endpoint; `helmet` for security headers
+- [ ] If hosted: HTTPS only, secure cookies, update redirect URI
+- [ ] Retry with exponential backoff on 5xx / network errors during upload
+- [ ] Basic tests for auth callback + upload route (mock Google API)
+
+---
+
+## 4. Gotchas to know up front
+
+1. **Unverified apps upload as Private only.** Videos uploaded through an API
+   project that hasn't passed Google's YouTube API compliance audit are locked
+   to *private*. Fine for personal use/testing; to publish public videos via the
+   app you'll need to apply for the audit.
+2. **Quota.** New projects get 10,000 units/day, and `videos.insert` is one of
+   the most expensive calls (check the current cost in Google's quota
+   calculator). Expect only a handful of uploads per day until you request more.
+3. **Testing-mode refresh tokens expire after 7 days.** While the consent screen
+   is in "Testing", users must reconnect weekly. Publishing the app removes this.
+4. **Brand accounts / multiple channels.** One Google login can own several
+   channels; the user picks the channel on Google's consent screen, so each
+   channel is connected as its own "account" in the app.
+5. **Large files.** Never load the whole video into memory — stream to disk,
+   then stream to YouTube with resumable upload.
+
+---
+
+## 5. Decisions to make before coding
+
+- **Local-only or hosted?** Local (runs on your machine) is simplest and avoids
+  most security work. Hosted needs HTTPS, a domain, and user login.
+- **Who uses it?** Just you, or multiple people each with their own accounts?
+  (Multi-user means scoping stored accounts to each app user.)
+- **Scheduling?** Want "publish at" support (`status.publishAt`) in v1 or later?
+
+---
+
+## 6. Order of attack (suggested)
+
+1. Phase 0 (you, in Google Cloud Console)
+2. Phase 1 + 2 together → first win: accounts connect
+3. Phase 3 → second win: a real upload
+4. Phase 4 → make it nice
+5. Phase 5 → only if it'll be hosted or shared
