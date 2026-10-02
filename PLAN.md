@@ -3,6 +3,10 @@
 A simple, clean browser app (Node.js backend) that uploads videos to any YouTube
 account the user can sign in to.
 
+**Direction:** build and run it locally first (just me, my channels), but
+structure it so it can be hosted online later, where anyone can sign in and
+upload to *their own* channels.
+
 ---
 
 ## 1. How it works (the big picture)
@@ -34,7 +38,7 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 | Google API | `googleapis` (official client)           | Handles OAuth + resumable uploads     |
 | Sessions   | `express-session`                        | Track who's using the app             |
 | File intake| `busboy` (or `multer` with disk storage) | Stream large files, don't buffer in RAM |
-| Storage    | SQLite (`better-sqlite3`) or JSON file   | Store connected accounts + tokens     |
+| Storage    | SQLite (`better-sqlite3`)                | Users + connected accounts + tokens; easy to move to Postgres when hosted |
 | Frontend   | Plain HTML + CSS + vanilla JS            | "Simple and clean", no build step     |
 | Progress   | Server-Sent Events (SSE)                 | Push YouTube upload % to the browser  |
 
@@ -62,6 +66,8 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
     server.js          # Express app, routes
     auth.js            # OAuth flow, token refresh
     accounts.js        # Load/save connected accounts (encrypted tokens)
+    db.js              # SQLite setup: users, accounts, uploads tables
+    config.js          # All env-driven settings (BASE_URL, secrets, mode)
     upload.js          # Streams file → YouTube resumable upload
   public/
     index.html
@@ -74,6 +80,17 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 **Done when:** a blank styled page loads.
 
 ### Phase 2 — Connect accounts (OAuth)
+- [ ] Multi-user-ready data model from day one:
+  ```
+  users     (id, google_sub, email, name, created_at)
+  accounts  (id, user_id → users.id, channel_id, channel_title, thumbnail,
+             encrypted_refresh_token, created_at)
+  uploads   (id, user_id, account_id, video_id, title, status, created_at)
+  ```
+  Every query filters by `user_id`. Locally there is just one user (you), but
+  nothing has to be rewritten when other people arrive.
+- [ ] `requireUser` middleware: locally (`APP_MODE=local`) it auto-signs-in the
+      single owner user; hosted (`APP_MODE=hosted`) it requires a real login
 - [ ] `GET /auth/google` → redirect to Google with `access_type=offline`,
       `prompt=consent select_account` (forces account picker + refresh token)
 - [ ] `GET /auth/callback` → exchange code for tokens, call `channels.list?mine=true`
@@ -112,6 +129,23 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 - [ ] If hosted: HTTPS only, secure cookies, update redirect URI
 - [ ] Retry with exponential backoff on 5xx / network errors during upload
 - [ ] Basic tests for auth callback + upload route (mock Google API)
+- [ ] Test that user A can never see or use user B's accounts
+
+### Phase 6 — Go online, multi-user
+- [ ] **App login = "Sign in with Google"** (OpenID Connect: `openid email profile`).
+      No passwords to store. Signing in creates/finds the `users` row; connecting
+      a channel is the separate step from Phase 2 (one user can connect many channels).
+- [ ] Switch `APP_MODE=hosted`; `requireUser` now enforces a session
+- [ ] Session store in the database (not memory) so restarts don't log people out
+- [ ] Move SQLite → Postgres if the host has no persistent disk
+- [ ] Deploy to Render / Railway / Fly.io (not Vercel/Netlify — upload size and timeout limits)
+- [ ] Domain + HTTPS; add `https://<domain>/auth/callback` as a redirect URI
+- [ ] Public pages Google requires: homepage, privacy policy, terms of service
+- [ ] Per-user upload limits so one person can't burn the whole daily API quota
+- [ ] "Delete my data" button (remove user, revoke all their tokens)
+- [ ] Apply for **Google OAuth verification** (needed past 100 users and to drop
+      the "unverified app" warning) and the **YouTube API compliance audit**
+      (needed for public uploads and a higher quota)
 
 ---
 
@@ -134,13 +168,14 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 
 ---
 
-## 5. Decisions to make before coding
+## 5. Decisions
 
-- **Local-only or hosted?** Local (runs on your machine) is simplest and avoids
-  most security work. Hosted needs HTTPS, a domain, and user login.
-- **Who uses it?** Just you, or multiple people each with their own accounts?
-  (Multi-user means scoping stored accounts to each app user.)
-- **Scheduling?** Want "publish at" support (`status.publishAt`) in v1 or later?
+- ✅ **Local first, hosted later.** Everything environment-specific (base URL,
+  secrets, mode) lives in `.env` / `config.js`, never hard-coded.
+- ✅ **Just me for now; multi-user when hosted.** The database is shaped for many
+  users from the start; login is switched on in Phase 6.
+- ✅ **App login when hosted = Sign in with Google.**
+- ⬜ **Scheduling?** "Publish at" support (`status.publishAt`) in v1 or later?
 
 ---
 
@@ -150,4 +185,4 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 2. Phase 1 + 2 together → first win: accounts connect
 3. Phase 3 → second win: a real upload
 4. Phase 4 → make it nice
-5. Phase 5 → only if it'll be hosted or shared
+5. Phase 5 + 6 → harden, then go online with multi-user login
