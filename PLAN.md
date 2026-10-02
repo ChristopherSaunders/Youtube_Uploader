@@ -40,7 +40,7 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 | File intake| `busboy` (or `multer` with disk storage) | Stream large files, don't buffer in RAM |
 | Storage    | SQLite (built-in `node:sqlite`)          | Users + connected accounts + tokens; easy to move to Postgres when hosted |
 | Frontend   | Plain HTML + CSS + vanilla JS            | "Simple and clean", no build step     |
-| Progress   | Server-Sent Events (SSE)                 | Push YouTube upload % to the browser  |
+| Progress   | Browser polls `/api/uploads/:id`         | Simple; YouTube upload keeps going if the page closes |
 
 ---
 
@@ -103,23 +103,23 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 **Done when:** you can connect 2+ accounts and see them listed with avatars.
 
 ### Phase 3 — Upload a video
-- [ ] Upload form: account picker, file, title, description, tags, privacy
+- [x] Upload form: account picker, file, title, description, tags, privacy
       (private / unlisted / public), "made for kids" toggle, optional category
-- [ ] `POST /api/upload` streams the file to a temp file on disk (not RAM)
-- [ ] Server calls `youtube.videos.insert` with `part=snippet,status` and a
+- [x] `POST /api/upload` streams the file to a temp file on disk (not RAM)
+- [x] Server calls `youtube.videos.insert` with `part=snippet,status` and a
       **resumable** media upload using the chosen account's credentials
-- [ ] Return the new video ID + link `https://youtu.be/<id>`
-- [ ] Delete the temp file when finished (success or failure)
+- [x] Return the new video ID + link `https://youtu.be/<id>`
+- [x] Delete the temp file when finished (success or failure)
 
 **Done when:** a test video lands on the chosen channel.
 
 ### Phase 4 — Progress & polish
-- [ ] Two-stage progress bar: browser → server (XHR `upload.onprogress`),
-      then server → YouTube (SSE fed by `onUploadProgress`)
-- [ ] Drag-and-drop file zone, file size/type validation
+- [x] Two-stage progress bar: browser → server (XHR `upload.onprogress`),
+      then server → YouTube (polled, fed by `onUploadProgress`)
+- [x] Drag-and-drop file zone, file size/type validation
 - [ ] Optional custom thumbnail (`thumbnails.set`)
-- [ ] Clear error messages (quota exceeded, token revoked → "reconnect account")
-- [ ] Upload history list (last N uploads per account)
+- [x] Clear error messages (quota exceeded, token revoked → "reconnect account")
+- [x] Upload history list (last 10 uploads)
 
 **Done when:** it feels good to use and failures explain themselves.
 
@@ -127,6 +127,8 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 - [ ] Limit max file size; validate MIME type
 - [ ] Rate-limit upload endpoint; `helmet` for security headers
 - [ ] If hosted: HTTPS only, secure cookies, update redirect URI
+- [ ] Switch to YouTube's resumable upload protocol so a dropped connection
+      resumes instead of restarting (currently a single streamed request)
 - [ ] Retry with exponential backoff on 5xx / network errors during upload
 - [ ] Basic tests for auth callback + upload route (mock Google API)
 - [ ] Test that user A can never see or use user B's accounts

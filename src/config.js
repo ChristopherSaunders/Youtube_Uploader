@@ -21,6 +21,19 @@ if (missing.length) {
   process.exit(1);
 }
 
+if (!process.env.GOOGLE_CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
+  console.error(
+    'GOOGLE_CLIENT_ID looks wrong: it should end with ".apps.googleusercontent.com".\n' +
+      'Copy the "Client ID" (not the secret or project ID) from ' +
+      'https://console.cloud.google.com/auth/clients',
+  );
+  process.exit(1);
+}
+
+if (!process.env.GOOGLE_CLIENT_SECRET.startsWith('GOCSPX-')) {
+  console.warn('Warning: GOOGLE_CLIENT_SECRET usually starts with "GOCSPX-". Double-check it in .env.');
+}
+
 const encryptionKey = Buffer.from(process.env.TOKEN_ENCRYPTION_KEY, 'hex');
 if (encryptionKey.length !== 32) {
   console.error('TOKEN_ENCRYPTION_KEY must be 64 hex characters. Run "npm run keygen".');
@@ -34,6 +47,7 @@ if (!['local', 'hosted'].includes(appMode)) {
 }
 
 const port = Number(process.env.PORT) || 3000;
+const maxUploadMb = Number(process.env.MAX_UPLOAD_MB) || 20480;
 const baseUrl = (process.env.BASE_URL || `http://localhost:${port}`).replace(/\/$/, '');
 
 export default {
@@ -47,4 +61,6 @@ export default {
   sessionSecret: process.env.SESSION_SECRET,
   encryptionKey,
   databasePath: process.env.DATABASE_PATH || 'data/app.db',
+  maxUploadMb,
+  maxUploadBytes: maxUploadMb * 1024 * 1024,
 };

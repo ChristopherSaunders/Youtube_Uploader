@@ -36,10 +36,14 @@ app.use('/api', apiRoutes);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 
 app.use((err, req, res, next) => {
+  if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
   console.error(err);
   res.status(500).json({ error: 'Something went wrong on the server.' });
 });
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   console.log(`YouTube Uploader running at ${config.baseUrl} (${config.appMode} mode)`);
 });
+
+// Node cuts off requests after 5 minutes by default; big videos take longer.
+server.requestTimeout = 0;

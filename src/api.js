@@ -1,9 +1,18 @@
 // JSON API used by the browser.
+import fs from 'node:fs';
 import express from 'express';
 import config from './config.js';
 import { requireUser } from './users.js';
 import { listAccounts, getAccountWithToken, deleteAccount } from './accounts.js';
 import { createOAuthClient } from './auth.js';
+import {
+  receiveUpload,
+  parseVideoDetails,
+  startYouTubeUpload,
+  getJob,
+  listRecentUploads,
+  httpError,
+} from './upload.js';
 
 const router = express.Router();
 router.use(requireUser);
@@ -30,6 +39,30 @@ router.delete('/accounts/:id', async (req, res) => {
 
   deleteAccount(req.user.id, account.id);
   res.status(204).end();
+});
+
+router.post('/uploads', async (req, res) => {
+  const { fields, file } = await receiveUpload(req);
+  try {
+    const details = parseVideoDetails(fields);
+    const account = getAccountWithToken(req.user.id, Number(fields.accountId));
+    if (!account) throw httpError(400, 'Choose a connected channel.');
+    const job = startYouTubeUpload(req.user, account, details, file);
+    res.status(202).json(job);
+  } catch (err) {
+    fs.rm(file.path, { force: true }, () => {});
+    throw err;
+  }
+});
+
+router.get('/uploads', (req, res) => {
+  res.json(listRecentUploads(req.user.id));
+});
+
+router.get('/uploads/:id', (req, res) => {
+  const job = getJob(req.user.id, Number(req.params.id));
+  if (!job) return res.status(404).json({ error: 'Upload not found.' });
+  res.json(job);
 });
 
 export default router;

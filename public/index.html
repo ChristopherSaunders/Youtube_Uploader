@@ -32,9 +32,108 @@
       </p>
     </section>
 
-    <section class="card disabled">
+    <section class="card" id="upload-card">
       <h2>Upload a video</h2>
-      <p class="muted">Coming next: pick a channel, choose a file, add a title and upload.</p>
+      <p class="muted" id="upload-hint">Connect a channel above to start uploading.</p>
+
+      <form id="upload-form" class="form" novalidate hidden>
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="video" name="video" accept="video/*,.mkv,.mts">
+          <span class="dropzone-icon" aria-hidden="true">⬆</span>
+          <span id="dropzone-text"><strong>Choose a video</strong> or drag it here</span>
+        </label>
+
+        <div class="field">
+          <label for="accountId">Channel</label>
+          <select id="accountId" name="accountId"></select>
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <label for="title">Title</label>
+            <span class="counter" id="title-count">0 / 100</span>
+          </div>
+          <input type="text" id="title" name="title" maxlength="100" required>
+        </div>
+
+        <div class="field">
+          <label for="description">Description</label>
+          <textarea id="description" name="description" rows="5" maxlength="5000"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="tags">Tags <span class="muted">(comma separated)</span></label>
+          <input type="text" id="tags" name="tags" placeholder="podcast, interview, comedy">
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="privacy">Visibility</label>
+            <select id="privacy" name="privacy">
+              <option value="private">Private</option>
+              <option value="unlisted">Unlisted</option>
+              <option value="public">Public</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="categoryId">Category</label>
+            <select id="categoryId" name="categoryId">
+              <option value="1">Film &amp; Animation</option>
+              <option value="2">Autos &amp; Vehicles</option>
+              <option value="10">Music</option>
+              <option value="15">Pets &amp; Animals</option>
+              <option value="17">Sports</option>
+              <option value="19">Travel &amp; Events</option>
+              <option value="20">Gaming</option>
+              <option value="22" selected>People &amp; Blogs</option>
+              <option value="23">Comedy</option>
+              <option value="24">Entertainment</option>
+              <option value="25">News &amp; Politics</option>
+              <option value="26">Howto &amp; Style</option>
+              <option value="27">Education</option>
+              <option value="28">Science &amp; Technology</option>
+              <option value="29">Nonprofits &amp; Activism</option>
+            </select>
+          </div>
+        </div>
+        <p class="note">Until Google approves this app, YouTube keeps uploads from it private.
+          You can change the visibility in YouTube Studio afterwards.</p>
+
+        <fieldset class="field">
+          <legend>Is this video made for kids?</legend>
+          <label class="choice"><input type="radio" name="madeForKids" value="no"> No, it's not made for kids</label>
+          <label class="choice"><input type="radio" name="madeForKids" value="yes"> Yes, it's made for kids</label>
+        </fieldset>
+
+        <label class="choice">
+          <input type="checkbox" id="notifySubscribers" checked> Notify subscribers
+        </label>
+
+        <button class="button primary wide" type="submit" id="upload-button">Upload to YouTube</button>
+      </form>
+
+      <div id="progress" class="progress-panel" hidden>
+        <div class="progress-label">
+          <span id="progress-stage">Sending video to the app…</span>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+        <p class="muted small" id="progress-detail"></p>
+      </div>
+
+      <div id="result" class="result" hidden>
+        <p id="result-text"></p>
+        <div class="result-actions">
+          <a class="button primary" id="result-watch" target="_blank" rel="noopener">Open on YouTube</a>
+          <a class="button ghost" id="result-studio" target="_blank" rel="noopener">Edit in YouTube Studio</a>
+          <button class="button ghost" type="button" id="upload-another">Upload another</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="history-card" hidden>
+      <h2>Recent uploads</h2>
+      <ul id="history" class="history"></ul>
     </section>
   </main>
 
