@@ -11,6 +11,7 @@ import { google } from 'googleapis';
 import config from './config.js';
 import db from './db.js';
 import { getAuthorizedClient } from './auth.js';
+import { uploadVideoResumable } from './resumable.js';
 
 const TEMP_DIR = path.join(os.tmpdir(), 'youtube-uploader');
 fs.rmSync(TEMP_DIR, { recursive: true, force: true }); // leftovers from a crash
@@ -154,11 +155,25 @@ export function parseVideoDetails(fields) {
     throw httpError(400, 'Say whether the video is made for kids.');
   }
 
+  // Scheduled videos must be uploaded as private; YouTube makes them public
+  // at publishAt.
+  let publishAt = null;
+  if (fields.publishAt) {
+    const when = new Date(fields.publishAt);
+    if (Number.isNaN(when.getTime())) throw httpError(400, 'Choose a valid publish date and time.');
+    if (when.getTime() < Date.now() + 5 * 60 * 1000) {
+      throw httpError(400, 'Schedule the video at least 5 minutes in the future.');
+    }
+    if (privacy !== 'private') throw httpError(400, 'Scheduled videos must be uploaded as private.');
+    publishAt = when.toISOString();
+  }
+
   return {
     title,
     description,
     tags,
     privacy,
+    publishAt,
     madeForKids: fields.madeForKids === 'yes',
     categoryId: /^\d+$/.test(fields.categoryId || '') ? fields.categoryId : '22',
     notifySubscribers: fields.notifySubscribers !== 'false',
@@ -166,6 +181,7 @@ export function parseVideoDetails(fields) {
 }
 
 function friendlyYouTubeError(err) {
+  if (!err.response && !err.errors) return err.message; // our own messages
   const data = err.response?.data;
   if (data?.error === 'invalid_grant') {
     return 'This channel\'s connection has expired. Disconnect it and connect it again.';
@@ -214,8 +230,11 @@ export function getJob(userId, uploadId) {
 
 export function startYouTubeUpload(user, account, details, file, thumbnail) {
   const { lastInsertRowid } = db
-    .prepare("INSERT INTO uploads (user_id, account_id, title, status) VALUES (?, ?, ?, 'uploading')")
-    .run(user.id, account.id, details.title);
+    .prepare(
+      `INSERT INTO uploads (user_id, account_id, title, status, publish_at)
+       VALUES (?, ?, ?, 'uploading', ?)`,
+    )
+    .run(user.id, account.id, details.title, details.publishAt);
   const uploadId = Number(lastInsertRowid);
 
   const job = {
@@ -226,6 +245,8 @@ export function startYouTubeUpload(user, account, details, file, thumbnail) {
     totalBytes: file.size,
     videoId: null,
     privacy: null,
+    publishAt: null,
+    retrying: false,
     error: null,
     warning: null,
   };
@@ -243,38 +264,42 @@ export function startYouTubeUpload(user, account, details, file, thumbnail) {
 }
 
 async function sendToYouTube(job, account, details, file, thumbnail) {
-  const youtube = google.youtube({ version: 'v3', auth: getAuthorizedClient(account) });
+  const auth = getAuthorizedClient(account);
+  const youtube = google.youtube({ version: 'v3', auth });
   try {
-    const { data } = await youtube.videos.insert(
-      {
-        part: ['snippet', 'status'],
-        notifySubscribers: details.notifySubscribers,
-        requestBody: {
-          snippet: {
-            title: details.title,
-            description: details.description,
-            tags: details.tags.length ? details.tags : undefined,
-            categoryId: details.categoryId,
-          },
-          status: {
-            privacyStatus: details.privacy,
-            selfDeclaredMadeForKids: details.madeForKids,
-          },
+    const data = await uploadVideoResumable({
+      auth,
+      notifySubscribers: details.notifySubscribers,
+      resource: {
+        snippet: {
+          title: details.title,
+          description: details.description,
+          tags: details.tags.length ? details.tags : undefined,
+          categoryId: details.categoryId,
         },
-        media: {
-          mimeType: file.mimeType.startsWith('video/') ? file.mimeType : undefined,
-          body: fs.createReadStream(file.path),
+        status: {
+          privacyStatus: details.privacy,
+          publishAt: details.publishAt || undefined,
+          selfDeclaredMadeForKids: details.madeForKids,
         },
       },
-      {
-        onUploadProgress: (event) => {
-          job.bytesSent = event.bytesRead;
-        },
+      filePath: file.path,
+      size: file.size,
+      mimeType: file.mimeType.startsWith('video/') ? file.mimeType : 'application/octet-stream',
+      onProgress: (bytes) => {
+        job.bytesSent = bytes;
+        job.retrying = false;
       },
-    );
+      onRetry: ({ attempt, delayMs }) => {
+        console.warn(`Upload interrupted; retry ${attempt} in ${Math.round(delayMs / 1000)}s`);
+        job.retrying = true;
+      },
+    });
     job.bytesSent = job.totalBytes;
+    job.retrying = false;
     job.videoId = data.id;
     job.privacy = data.status?.privacyStatus || details.privacy;
+    job.publishAt = data.status?.publishAt || details.publishAt;
   } catch (err) {
     console.error('YouTube upload failed:', err.response?.data || err.message);
     job.status = 'error';
@@ -301,7 +326,7 @@ async function sendToYouTube(job, account, details, file, thumbnail) {
 export function listRecentUploads(userId) {
   return db
     .prepare(
-      `SELECT u.id, u.title, u.status, u.video_id, u.error, u.warning, u.created_at,
+      `SELECT u.id, u.title, u.status, u.video_id, u.error, u.warning, u.publish_at, u.created_at,
               a.channel_title
          FROM uploads u
          LEFT JOIN accounts a ON a.id = u.account_id

@@ -172,6 +172,36 @@ function thumbnailProblem(image) {
   return null;
 }
 
+// ---------- Scheduling ----------
+
+const privacySelect = $('privacy');
+const publishAtInput = $('publishAt');
+
+function toLocalInputValue(date) {
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function updateScheduleField() {
+  const scheduled = privacySelect.value === 'scheduled';
+  $('schedule-field').hidden = !scheduled;
+  if (!scheduled) return;
+  publishAtInput.min = toLocalInputValue(new Date(Date.now() + 10 * 60 * 1000));
+  if (!publishAtInput.value) {
+    const tomorrowMorning = new Date();
+    tomorrowMorning.setDate(tomorrowMorning.getDate() + 1);
+    tomorrowMorning.setHours(9, 0, 0, 0);
+    publishAtInput.value = toLocalInputValue(tomorrowMorning);
+  }
+}
+
+privacySelect.addEventListener('change', updateScheduleField);
+$('timezone').textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+function formatWhen(iso) {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 function updateTitleCount() {
   const length = titleInput.value.length;
   titleCount.textContent = `${length} / 100`;
@@ -188,6 +218,13 @@ function validate() {
   if (!title) return 'Add a title.';
   if (/[<>]/.test(title)) return 'Titles cannot contain < or >.';
   if (/[<>]/.test($('description').value)) return 'Descriptions cannot contain < or >.';
+  if (privacySelect.value === 'scheduled') {
+    const when = new Date(publishAtInput.value);
+    if (!publishAtInput.value || Number.isNaN(when.getTime())) return 'Choose when to publish.';
+    if (when.getTime() < Date.now() + 5 * 60 * 1000) {
+      return 'Schedule the video at least 5 minutes in the future.';
+    }
+  }
   if (!form.querySelector('input[name="madeForKids"]:checked')) {
     return 'Say whether the video is made for kids (YouTube requires this).';
   }
@@ -238,13 +275,10 @@ async function waitForYouTube(uploadId) {
       continue;
     }
     const fraction = job.totalBytes ? job.bytesSent / job.totalBytes : 0;
-    setProgress(
-      'Step 2 of 2 · Uploading to YouTube…',
-      fraction,
-      fraction >= 1
-        ? 'Finishing up with YouTube…'
-        : `${formatBytes(job.bytesSent)} of ${formatBytes(job.totalBytes)} · you can close this page now`,
-    );
+    let detail = `${formatBytes(job.bytesSent)} of ${formatBytes(job.totalBytes)} · you can close this page now`;
+    if (fraction >= 1) detail = 'Finishing up with YouTube…';
+    if (job.retrying) detail = 'Connection dropped. Reconnecting and picking up where it left off…';
+    setProgress('Step 2 of 2 · Uploading to YouTube…', fraction, detail);
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
@@ -257,8 +291,14 @@ form.addEventListener('submit', async (event) => {
 
   // Text fields first so the server reads them before the (large) file.
   const formData = new FormData();
-  for (const name of ['accountId', 'title', 'description', 'tags', 'privacy', 'categoryId']) {
+  for (const name of ['accountId', 'title', 'description', 'tags', 'categoryId']) {
     formData.append(name, form.elements[name].value);
+  }
+  if (privacySelect.value === 'scheduled') {
+    formData.append('privacy', 'private');
+    formData.append('publishAt', new Date(publishAtInput.value).toISOString());
+  } else {
+    formData.append('privacy', privacySelect.value);
   }
   formData.append('madeForKids', form.querySelector('input[name="madeForKids"]:checked').value);
   formData.append('notifySubscribers', String($('notifySubscribers').checked));
@@ -292,10 +332,9 @@ window.addEventListener('beforeunload', (event) => {
 function showResult(job) {
   progressPanel.hidden = true;
   result.hidden = false;
-  const privacyNote =
-    job.privacy === 'private'
-      ? ' It is private for now. Change the visibility in YouTube Studio when you are ready.'
-      : '';
+  let privacyNote = '';
+  if (job.publishAt) privacyNote = ` It's scheduled to go public on ${formatWhen(job.publishAt)}.`;
+  else if (job.privacy === 'private') privacyNote = ' It is private.';
   $('result-text').textContent = `Uploaded! YouTube is now processing your video.${privacyNote}`;
   $('result-warning').textContent = job.warning || '';
   $('result-warning').hidden = !job.warning;
@@ -311,6 +350,7 @@ $('upload-another').addEventListener('click', () => {
   showChosenFile();
   showChosenThumbnail();
   updateTitleCount();
+  updateScheduleField();
   form.hidden = false;
 });
 
@@ -341,7 +381,9 @@ async function loadHistory() {
         }
         const meta = document.createElement('div');
         meta.className = 'muted small';
-        meta.textContent = [upload.channel_title, upload.error, upload.warning]
+        const scheduled =
+          upload.publish_at && upload.status === 'done' ? `Scheduled for ${formatWhen(upload.publish_at)}` : null;
+        meta.textContent = [upload.channel_title, scheduled, upload.error, upload.warning]
           .filter(Boolean)
           .join(' · ');
         main.append(title, meta);

@@ -127,9 +127,9 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 - [ ] Limit max file size; validate MIME type
 - [ ] Rate-limit upload endpoint; `helmet` for security headers
 - [ ] If hosted: HTTPS only, secure cookies, update redirect URI
-- [ ] Switch to YouTube's resumable upload protocol so a dropped connection
-      resumes instead of restarting (currently a single streamed request)
-- [ ] Retry with exponential backoff on 5xx / network errors during upload
+- [x] Switch to YouTube's resumable upload protocol so a dropped connection
+      resumes instead of restarting (8 MB chunks)
+- [x] Retry with exponential backoff on 5xx / network errors during upload
 - [ ] Basic tests for auth callback + upload route (mock Google API)
 - [ ] Test that user A can never see or use user B's accounts
 
@@ -154,8 +154,8 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 ## 4. Gotchas to know up front
 
 1. **Unverified apps upload as Private only.** Videos uploaded through an API
-   project that hasn't passed Google's YouTube API compliance audit are locked
-   to *private*. Fine for personal use/testing; to publish public videos via the
+   project that hasn't passed Google's YouTube API compliance audit are *locked*
+   as private: they can't be made public later or published on a schedule. Fine for personal use/testing; to publish public videos via the
    app you'll need to apply for the audit.
 2. **Quota.** New projects get 10,000 units/day, and `videos.insert` is one of
    the most expensive calls (check the current cost in Google's quota
@@ -177,7 +177,7 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 - ✅ **Just me for now; multi-user when hosted.** The database is shaped for many
   users from the start; login is switched on in Phase 6.
 - ✅ **App login when hosted = Sign in with Google.**
-- ⬜ **Scheduling?** "Publish at" support (`status.publishAt`) in v1 or later?
+- ✅ **Scheduling** via `status.publishAt` (upload as private, YouTube publishes at that time).
 
 ---
 

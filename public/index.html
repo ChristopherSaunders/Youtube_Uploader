@@ -89,6 +89,7 @@
               <option value="private">Private</option>
               <option value="unlisted">Unlisted</option>
               <option value="public">Public</option>
+              <option value="scheduled">Scheduled</option>
             </select>
           </div>
           <div class="field">
@@ -112,8 +113,16 @@
             </select>
           </div>
         </div>
-        <p class="note">Until Google approves this app, YouTube keeps uploads from it private.
-          You can change the visibility in YouTube Studio afterwards.</p>
+        <div class="field" id="schedule-field" hidden>
+          <label for="publishAt">Publish on</label>
+          <input type="datetime-local" id="publishAt">
+          <p class="muted small">Uploads as private, then YouTube makes it public at this time
+            (<span id="timezone"></span>).</p>
+        </div>
+
+        <p class="note">Until Google approves this app (the YouTube API audit), YouTube locks
+          uploads from it as private: they can't be made public or published on a schedule.
+          <a href="https://support.google.com/youtube/answer/7300965" target="_blank" rel="noopener">Learn more</a></p>
 
         <fieldset class="field">
           <legend>Is this video made for kids?</legend>

@@ -43,12 +43,15 @@ db.exec(`
     status      TEXT NOT NULL,
     error       TEXT,
     warning     TEXT,
+    publish_at  TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
 
 // Columns added after the first release, for databases created before them.
 const uploadColumns = db.prepare('PRAGMA table_info(uploads)').all().map((column) => column.name);
-if (!uploadColumns.includes('warning')) db.exec('ALTER TABLE uploads ADD COLUMN warning TEXT');
+for (const column of ['warning', 'publish_at']) {
+  if (!uploadColumns.includes(column)) db.exec(`ALTER TABLE uploads ADD COLUMN ${column} TEXT`);
+}
 
 export default db;
