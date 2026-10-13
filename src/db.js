@@ -29,6 +29,7 @@ db.exec(`
     channel_handle   TEXT,
     thumbnail_url    TEXT,
     encrypted_refresh_token TEXT NOT NULL,
+    needs_reconnect  INTEGER NOT NULL DEFAULT 0,
     created_at       TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (user_id, channel_id)
@@ -52,6 +53,10 @@ db.exec(`
 const uploadColumns = db.prepare('PRAGMA table_info(uploads)').all().map((column) => column.name);
 for (const column of ['warning', 'publish_at']) {
   if (!uploadColumns.includes(column)) db.exec(`ALTER TABLE uploads ADD COLUMN ${column} TEXT`);
+}
+const accountColumns = db.prepare('PRAGMA table_info(accounts)').all().map((column) => column.name);
+if (!accountColumns.includes('needs_reconnect')) {
+  db.exec('ALTER TABLE accounts ADD COLUMN needs_reconnect INTEGER NOT NULL DEFAULT 0');
 }
 
 export default db;

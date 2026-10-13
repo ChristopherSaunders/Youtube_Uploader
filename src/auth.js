@@ -4,7 +4,7 @@ import express from 'express';
 import { google } from 'googleapis';
 import config from './config.js';
 import { requireUser } from './users.js';
-import { saveAccount, updateRefreshToken } from './accounts.js';
+import { saveAccount, updateRefreshToken, markNeedsReconnect } from './accounts.js';
 
 export const SCOPES = [
   'https://www.googleapis.com/auth/youtube.upload',
@@ -28,6 +28,28 @@ export function getAuthorizedClient(account) {
     if (tokens.refresh_token) updateRefreshToken(account.id, tokens.refresh_token);
   });
   return client;
+}
+
+// Google answers "invalid_grant" when a saved sign-in has expired or been
+// revoked (e.g. after 7 days while the Google Cloud app is in Testing mode).
+export function isExpiredSignIn(err) {
+  return err?.response?.data?.error === 'invalid_grant';
+}
+
+export const RECONNECT_MESSAGE =
+  "This channel's connection to Google has expired. Click Reconnect next to the channel, " +
+  'sign in again, then retry.';
+
+// Swaps the saved sign-in for a fresh access token, without uploading anything.
+export async function checkSignIn(account) {
+  try {
+    await getAuthorizedClient(account).getAccessToken();
+    return { ok: true };
+  } catch (err) {
+    if (!isExpiredSignIn(err)) throw err;
+    markNeedsReconnect(account.id);
+    return { ok: false, error: RECONNECT_MESSAGE };
+  }
 }
 
 function redirectWithMessage(res, key, message) {

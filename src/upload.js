@@ -10,7 +10,8 @@ import busboy from 'busboy';
 import { google } from 'googleapis';
 import config from './config.js';
 import db from './db.js';
-import { getAuthorizedClient } from './auth.js';
+import { getAuthorizedClient, isExpiredSignIn, RECONNECT_MESSAGE } from './auth.js';
+import { getAccountWithToken, markNeedsReconnect } from './accounts.js';
 import { uploadVideoResumable } from './resumable.js';
 
 const TEMP_DIR = path.join(os.tmpdir(), 'youtube-uploader');
@@ -183,9 +184,7 @@ export function parseVideoDetails(fields) {
 function friendlyYouTubeError(err) {
   if (!err.response && !err.errors) return err.message; // our own messages
   const data = err.response?.data;
-  if (data?.error === 'invalid_grant') {
-    return 'This channel\'s connection has expired. Disconnect it and connect it again.';
-  }
+  if (isExpiredSignIn(err)) return RECONNECT_MESSAGE;
   const reason = err.errors?.[0]?.reason || data?.error?.errors?.[0]?.reason;
   switch (reason) {
     case 'quotaExceeded':
@@ -222,10 +221,69 @@ function friendlyThumbnailError(err) {
 // In-progress uploads, kept in memory for the browser to poll. Finished
 // results are also saved in the uploads table.
 const jobs = new Map();
+// What a failed upload needs to be retried (kept off the job, which is sent
+// to the browser). Only kept when the failure was an expired sign-in.
+const retryable = new Map();
+const JOB_TTL_MS = 60 * 60 * 1000;
+const RETRY_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function getJob(userId, uploadId) {
   const job = jobs.get(uploadId);
   return job && job.userId === userId ? job : null;
+}
+
+export function retryableIds(userId) {
+  return [...retryable.keys()].filter((id) => jobs.get(id)?.userId === userId);
+}
+
+function forgetRetry(uploadId) {
+  const saved = retryable.get(uploadId);
+  if (!saved) return;
+  clearTimeout(saved.timer);
+  fs.rm(saved.file.path, { force: true }, () => {});
+  retryable.delete(uploadId);
+}
+
+function runUpload(job, account, details, file, thumbnail) {
+  sendToYouTube(job, account, details, file, thumbnail).finally(() => {
+    if (job.needsReconnect) {
+      markNeedsReconnect(account.id);
+      const timer = setTimeout(() => {
+        forgetRetry(job.id);
+        jobs.delete(job.id);
+      }, RETRY_TTL_MS);
+      retryable.set(job.id, { accountId: account.id, details, file, thumbnail, timer });
+    } else {
+      fs.rm(file.path, { force: true }, () => {});
+      setTimeout(() => jobs.delete(job.id), JOB_TTL_MS);
+    }
+    db.prepare(
+      'UPDATE uploads SET status = ?, video_id = ?, error = ?, warning = ? WHERE id = ?',
+    ).run(job.status, job.videoId, job.error, job.warning, job.id);
+  });
+}
+
+// Re-sends a video the app already has, e.g. after reconnecting the channel.
+export function retryUpload(userId, uploadId) {
+  const job = getJob(userId, uploadId);
+  const saved = retryable.get(uploadId);
+  if (!job || !saved) return null;
+  const account = getAccountWithToken(userId, saved.accountId);
+  if (!account) return null;
+
+  clearTimeout(saved.timer);
+  retryable.delete(uploadId);
+  Object.assign(job, {
+    status: 'uploading',
+    bytesSent: 0,
+    retrying: false,
+    needsReconnect: false,
+    error: null,
+    warning: null,
+  });
+  db.prepare("UPDATE uploads SET status = 'uploading', error = NULL WHERE id = ?").run(uploadId);
+  runUpload(job, account, saved.details, saved.file, saved.thumbnail);
+  return job;
 }
 
 export function startYouTubeUpload(user, account, details, file, thumbnail) {
@@ -247,19 +305,12 @@ export function startYouTubeUpload(user, account, details, file, thumbnail) {
     privacy: null,
     publishAt: null,
     retrying: false,
+    needsReconnect: false,
     error: null,
     warning: null,
   };
   jobs.set(uploadId, job);
-
-  sendToYouTube(job, account, details, file, thumbnail).finally(() => {
-    fs.rm(file.path, { force: true }, () => {});
-    db.prepare(
-      'UPDATE uploads SET status = ?, video_id = ?, error = ?, warning = ? WHERE id = ?',
-    ).run(job.status, job.videoId, job.error, job.warning, job.id);
-    setTimeout(() => jobs.delete(uploadId), 60 * 60 * 1000);
-  });
-
+  runUpload(job, account, details, file, thumbnail);
   return job;
 }
 
@@ -304,6 +355,7 @@ async function sendToYouTube(job, account, details, file, thumbnail) {
     console.error('YouTube upload failed:', err.response?.data || err.message);
     job.status = 'error';
     job.error = friendlyYouTubeError(err);
+    job.needsReconnect = isExpiredSignIn(err);
     return;
   }
 

@@ -65,9 +65,15 @@ function renderAccounts(accounts) {
       img.src = account.thumbnail_url;
     }
     item.querySelector('.account-title').textContent = account.channel_title;
-    item.querySelector('.account-handle').textContent = account.channel_handle || account.channel_id;
+    const handle = item.querySelector('.account-handle');
+    handle.textContent = account.channel_handle || account.channel_id;
+    if (account.needs_reconnect) {
+      handle.textContent = 'Connection expired';
+      handle.classList.add('expired');
+      item.querySelector('.reconnect').hidden = false;
+    }
 
-    const button = item.querySelector('button');
+    const button = item.querySelector('.disconnect');
     button.addEventListener('click', () => disconnect(account, button));
     accountsList.append(item);
   }
@@ -311,9 +317,14 @@ form.addEventListener('submit', async (event) => {
   setProgress('Step 1 of 2 · Sending video to the app…', 0);
 
   try {
+    // Make sure the channel's sign-in still works before sending a big file.
+    const check = await api(`/accounts/${accountSelect.value}/check`, { method: 'POST' });
+    if (!check.ok) {
+      loadAccounts();
+      throw new Error(check.error);
+    }
     const job = await sendToApp(formData);
-    const done = await waitForYouTube(job.id);
-    showResult(done);
+    await trackUpload(job.id);
   } catch (err) {
     progressPanel.hidden = true;
     form.hidden = false;
@@ -323,6 +334,36 @@ form.addEventListener('submit', async (event) => {
     loadHistory();
   }
 });
+
+async function trackUpload(uploadId) {
+  try {
+    showResult(await waitForYouTube(uploadId));
+  } finally {
+    loadAccounts(); // picks up a channel that now needs reconnecting
+  }
+}
+
+async function retry(upload, button) {
+  hideFlash();
+  button.disabled = true;
+  try {
+    await api(`/uploads/${upload.id}/retry`, { method: 'POST' });
+    uploading = true;
+    form.hidden = true;
+    result.hidden = true;
+    progressPanel.hidden = false;
+    setProgress('Step 2 of 2 · Uploading to YouTube…', 0);
+    $('upload-card').scrollIntoView({ behavior: 'smooth' });
+    await trackUpload(upload.id);
+  } catch (err) {
+    progressPanel.hidden = true;
+    form.hidden = !result.hidden;
+    showFlash('error', err.message);
+  } finally {
+    uploading = false;
+    loadHistory();
+  }
+}
 
 window.addEventListener('beforeunload', (event) => {
   // Only step 1 needs the page open; step 2 continues on the server.
@@ -388,12 +429,23 @@ async function loadHistory() {
           .join(' · ');
         main.append(title, meta);
 
+        const side = document.createElement('div');
+        side.className = 'history-side';
         const status = document.createElement('span');
         status.className = `status ${upload.warning ? 'warning' : upload.status}`;
         status.textContent = upload.warning
           ? 'Uploaded, no thumbnail'
           : STATUS_LABELS[upload.status] || upload.status;
-        item.append(main, status);
+        side.append(status);
+        if (upload.can_retry) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'button ghost small-button';
+          button.textContent = 'Retry';
+          button.addEventListener('click', () => retry(upload, button));
+          side.append(button);
+        }
+        item.append(main, side);
         return item;
       }),
     );

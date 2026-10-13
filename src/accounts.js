@@ -3,7 +3,8 @@
 import db from './db.js';
 import { encrypt, decrypt } from './crypto.js';
 
-const PUBLIC_COLUMNS = 'id, channel_id, channel_title, channel_handle, thumbnail_url, created_at';
+const PUBLIC_COLUMNS =
+  'id, channel_id, channel_title, channel_handle, thumbnail_url, needs_reconnect, created_at';
 
 export function listAccounts(userId) {
   return db
@@ -32,6 +33,7 @@ export function saveAccount(userId, channel, refreshToken) {
        channel_handle = excluded.channel_handle,
        thumbnail_url = excluded.thumbnail_url,
        encrypted_refresh_token = excluded.encrypted_refresh_token,
+       needs_reconnect = 0,
        updated_at = datetime('now')`,
   ).run({ userId, ...channel, token: encrypt(refreshToken) });
 }
@@ -40,6 +42,10 @@ export function updateRefreshToken(accountId, refreshToken) {
   db.prepare(
     "UPDATE accounts SET encrypted_refresh_token = ?, updated_at = datetime('now') WHERE id = ?",
   ).run(encrypt(refreshToken), accountId);
+}
+
+export function markNeedsReconnect(accountId) {
+  db.prepare('UPDATE accounts SET needs_reconnect = 1 WHERE id = ?').run(accountId);
 }
 
 export function deleteAccount(userId, accountId) {

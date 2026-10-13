@@ -4,12 +4,14 @@ import express from 'express';
 import config from './config.js';
 import { requireUser } from './users.js';
 import { listAccounts, getAccountWithToken, deleteAccount } from './accounts.js';
-import { createOAuthClient } from './auth.js';
+import { createOAuthClient, checkSignIn } from './auth.js';
 import {
   receiveUpload,
   parseVideoDetails,
   startYouTubeUpload,
   getJob,
+  retryUpload,
+  retryableIds,
   listRecentUploads,
   httpError,
 } from './upload.js';
@@ -23,6 +25,14 @@ router.get('/me', (req, res) => {
 
 router.get('/accounts', (req, res) => {
   res.json(listAccounts(req.user.id));
+});
+
+// Called before sending a video, so an expired sign-in shows up straight away
+// instead of after the whole file has been sent.
+router.post('/accounts/:id/check', async (req, res) => {
+  const account = getAccountWithToken(req.user.id, Number(req.params.id));
+  if (!account) return res.status(404).json({ error: 'Channel not found.' });
+  res.json(await checkSignIn(account));
 });
 
 router.delete('/accounts/:id', async (req, res) => {
@@ -56,7 +66,18 @@ router.post('/uploads', async (req, res) => {
 });
 
 router.get('/uploads', (req, res) => {
-  res.json(listRecentUploads(req.user.id));
+  const canRetry = new Set(retryableIds(req.user.id));
+  res.json(
+    listRecentUploads(req.user.id).map((upload) => ({ ...upload, can_retry: canRetry.has(upload.id) })),
+  );
+});
+
+router.post('/uploads/:id/retry', (req, res) => {
+  const job = retryUpload(req.user.id, Number(req.params.id));
+  if (!job) {
+    throw httpError(404, 'That upload can no longer be retried. Please upload the video again.');
+  }
+  res.status(202).json(job);
 });
 
 router.get('/uploads/:id', (req, res) => {

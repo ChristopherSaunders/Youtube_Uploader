@@ -124,6 +124,8 @@ h2 { margin: 0 0 4px; font-size: 18px; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .account-info { flex: 1; min-width: 0; }
 .account-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-handle.expired { color: var(--error-text); font-weight: 600; }
+.account .button[hidden] { display: none; }
 
 .empty { margin: 20px 0 0; padding: 20px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: 10px; }
 
@@ -250,3 +252,4 @@ input[type="text"]:focus, input[type="datetime-local"]:focus, textarea:focus, se
   color: var(--error-text);
 }
 .status.warning { color: var(--error-text); }
+.history-side { display: grid; justify-items: end; align-content: start; gap: 6px; }
