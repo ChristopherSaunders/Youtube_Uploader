@@ -41,7 +41,16 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong on the server.' });
 });
 
-const server = app.listen(config.port, () => {
+// Express 5 calls this on startup errors too, not just on success.
+const server = app.listen(config.port, (err) => {
+  if (err?.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${config.port} is already in use. YouTube Uploader is probably already running:\n` +
+        `open ${config.baseUrl} in your browser, or close the other window first.`,
+    );
+    process.exit(1);
+  }
+  if (err) throw err;
   console.log(`YouTube Uploader running at ${config.baseUrl} (${config.appMode} mode)`);
 });
 

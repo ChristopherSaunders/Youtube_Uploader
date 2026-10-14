@@ -28,6 +28,11 @@ redirect URI `http://localhost:3000/auth/callback`).
    ```
 6. Open http://localhost:3000 and click **Connect a channel**.
 
+**Windows shortcut:** after the first setup, double-click `start.bat` to start the
+app and open it in your browser. Close its window to stop the app. To put it on
+your desktop: right-click `start.bat` → **Show more options** → **Send to** →
+**Desktop (create shortcut)**.
+
 Google will warn that the app isn't verified yet. That's expected for your own
 project: click **Continue**, and tick both YouTube permission boxes.
 
