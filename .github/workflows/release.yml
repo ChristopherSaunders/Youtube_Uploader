@@ -1,0 +1,41 @@
+# Delivery: pushing a version tag (e.g. v0.2.0) runs the full CI, then
+# publishes a GitHub Release with a ready-to-run zip of the app.
+# A deploy-to-server step belongs here once the app is hosted (PLAN.md Phase 6).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Publish release
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the tag matches package.json
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+
+      # Files marked export-ignore in .gitattributes (tests, CI config) are left out.
+      - name: Build zip
+        run: git archive --format=zip --prefix=youtube-uploader/ -o "youtube-uploader-$GITHUB_REF_NAME.zip" HEAD
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "youtube-uploader-$GITHUB_REF_NAME.zip" --generate-notes

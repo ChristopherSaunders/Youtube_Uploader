@@ -1,0 +1,10 @@
+# Windows batch files need Windows line endings
+*.bat text eol=crlf
+
+# Left out of release zips: development and CI files
+/.github export-ignore
+/tests export-ignore
+/playwright.config.js export-ignore
+/eslint.config.js export-ignore
+/.gitattributes export-ignore
+/docs export-ignore
