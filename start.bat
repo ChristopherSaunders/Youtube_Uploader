@@ -11,7 +11,7 @@ if exist .env (
 
 if not exist node_modules (
   echo Installing dependencies, this only happens the first time...
-  call npm install || goto :failed
+  call npm install --omit=dev || goto :failed
 )
 
 rem Open the browser once the app answers, checking every second for up to a minute.
