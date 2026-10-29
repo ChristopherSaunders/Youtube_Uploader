@@ -1,12 +1,91 @@
-# Youtube_Uploader
-This is a Youtube uploader app to speed the process of uploading videos to youtube with a couple clicks
+# YouTube Uploader
 
-See [PLAN.md](PLAN.md) for the full game plan.
+[![CI](https://github.com/ChristopherSaunders/Youtube_Uploader/actions/workflows/ci.yml/badge.svg)](https://github.com/ChristopherSaunders/Youtube_Uploader/actions/workflows/ci.yml)
 
-## Setup
+A clean, simple browser app for uploading videos to your YouTube channels in a couple
+of clicks. Connect one or more channels with Google sign-in, fill in the details, and
+the app handles the upload: in chunks that survive a dropped connection, with live
+progress, thumbnails and scheduled publishing.
 
-Requires [Node.js](https://nodejs.org) 22.13 or newer, and the Google Cloud project
-from Phase 0 of the plan (YouTube Data API v3 enabled, OAuth client created with
+Built with Node.js and Express, a vanilla JavaScript front end, and tested end to end
+with Playwright on Linux and Windows.
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="YouTube Uploader: a connected channel, the upload form with a thumbnail preview, and recent uploads" width="620">
+</p>
+
+## Features
+
+- **Multiple channels.** Connect any channel you can sign in to, via Google OAuth 2.0.
+  The app never sees a password.
+- **Full video details.** Title, description, tags, category, visibility, "made for
+  kids", subscriber notifications and a custom thumbnail, checked against YouTube's
+  rules before any upload quota is spent.
+- **Scheduled publishing.** Pick a date and time in your own time zone.
+- **Uploads that survive network problems.** Videos go up in 8 MB chunks using
+  YouTube's resumable protocol. After a dropped connection or server error, the app
+  asks YouTube how much arrived and continues from there, with exponential backoff.
+- **Live two-step progress.** Browser → app, then app → YouTube. You can close the
+  page once the second step starts.
+- **Expired sign-ins handled gracefully.** The app checks a channel's sign-in before
+  sending a large file. If it expires mid-upload, the video is kept so it can be
+  retried after reconnecting, without sending it again.
+- **Upload history** with links to each video and YouTube Studio.
+- **Light and dark mode**, and a layout that works on phones.
+
+## Tech stack
+
+| Area | Choice |
+|------|--------|
+| Server | Node.js 22+, Express 5 |
+| Google APIs | `googleapis` (OAuth 2.0, YouTube Data API v3); resumable upload protocol implemented directly with `fetch` |
+| Storage | SQLite via Node's built-in `node:sqlite`; refresh tokens encrypted with AES-256-GCM |
+| Uploads | Streamed to disk with `busboy`, so large videos never sit in memory |
+| Front end | Plain HTML, CSS and JavaScript, with no build step |
+| Testing | Playwright end-to-end tests against a faked Google/YouTube; ESLint |
+| CI/CD | GitHub Actions: lint, dependency audit, and tests on Ubuntu and Windows × Node 22 and 24; tagged releases |
+
+## How it works
+
+```
+Browser ──(multipart upload, progress)──▶ Express app ──(resumable upload, 8 MB chunks)──▶ YouTube
+   ▲                                           │
+   └────────── polls /api/uploads/:id ─────────┘   OAuth 2.0 refresh tokens, encrypted in SQLite
+```
+
+- **Signing in:** connecting a channel runs Google's OAuth flow with a CSRF `state`
+  check. The app also confirms the user granted the upload permission, then stores
+  the channel's refresh token encrypted at rest.
+- **Uploading:** the browser sends the video to the app, which saves it to a temp
+  file and uploads it to YouTube in the background. The page polls for progress.
+- **Ready for multiple users:** every channel and upload belongs to a user, and every
+  query is scoped to that user. Locally a single owner is signed in automatically.
+  The hosted, multi-user version is the next phase in [PLAN.md](PLAN.md).
+
+## Project structure
+
+```
+src/
+  server.js       starts the HTTP server
+  app.js          Express app: sessions, static files, routes, error handling
+  auth.js         Google OAuth flow and sign-in checks
+  api.js          JSON API used by the browser
+  upload.js       receives videos, validates details, runs uploads and retries
+  resumable.js    YouTube resumable upload protocol with backoff
+  accounts.js     connected channels (encrypted tokens)
+  db.js           SQLite schema and migrations
+  crypto.js       AES-256-GCM token encryption
+  config.js       all environment-based settings
+public/           the browser app (HTML, CSS, JS)
+tests/e2e/        Playwright tests and the fake Google/YouTube server
+.github/          CI, release and Dependabot configuration
+start.bat         Windows: double-click to start the app and open the browser
+```
+
+## Getting started
+
+Requires [Node.js](https://nodejs.org) 22.13 or newer, and a Google Cloud project
+(see Phase 0 in [PLAN.md](PLAN.md)) (YouTube Data API v3 enabled, OAuth client created with
 redirect URI `http://localhost:3000/auth/callback`).
 
 1. Install dependencies:
@@ -65,3 +144,9 @@ GitHub Actions (`.github/workflows/`):
 
   Deploying to a server will be added here once the app is hosted (PLAN.md Phase 6).
 
+## Roadmap
+
+[PLAN.md](PLAN.md) has the full plan. Next up:
+
+- Pass Google's YouTube API audit. Until then, YouTube keeps uploads from the app private.
+- Host it online with "Sign in with Google", so anyone can upload to their own channels.

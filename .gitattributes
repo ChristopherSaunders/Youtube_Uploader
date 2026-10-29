@@ -7,3 +7,4 @@
 /playwright.config.js export-ignore
 /eslint.config.js export-ignore
 /.gitattributes export-ignore
+/docs export-ignore
