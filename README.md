@@ -84,9 +84,9 @@ start.bat         Windows: double-click to start the app and open the browser
 
 ## Getting started
 
-Requires [Node.js](https://nodejs.org) 22.13 or newer, and a Google Cloud project
-(see Phase 0 in [PLAN.md](PLAN.md)) (YouTube Data API v3 enabled, OAuth client created with
-redirect URI `http://localhost:3000/auth/callback`).
+Requires [Node.js](https://nodejs.org) 22.13 or newer, and a Google Cloud project with
+the YouTube Data API v3 enabled and an OAuth client whose redirect URI is
+`http://localhost:3000/auth/callback`. Phase 0 in [PLAN.md](PLAN.md) walks through it.
 
 1. Install dependencies:
    ```sh
