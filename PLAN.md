@@ -130,7 +130,8 @@ third-party uploads, and it's what lets one app manage many accounts/channels.
 - [x] Switch to YouTube's resumable upload protocol so a dropped connection
       resumes instead of restarting (8 MB chunks)
 - [x] Retry with exponential backoff on 5xx / network errors during upload
-- [ ] Basic tests for auth callback + upload route (mock Google API)
+- [x] End-to-end tests with Playwright (Google and YouTube faked)
+- [x] CI on every push (lint, audit, tests on Linux + Windows); releases on version tags
 - [ ] Test that user A can never see or use user B's accounts
 
 ### Phase 6 — Go online, multi-user

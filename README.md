@@ -38,3 +38,30 @@ project: click **Continue**, and tick both YouTube permission boxes.
 
 `.env` and `data/` (the local database with your encrypted tokens) are ignored by
 git. Never commit them.
+
+## Tests
+
+End-to-end tests drive the real app in a browser with [Playwright](https://playwright.dev).
+Google sign-in and YouTube are faked (`tests/e2e/fake-google-server.js`), so tests never
+touch a real channel or use upload quota.
+
+```sh
+npx playwright install chromium   # once
+npm test                          # lint + end-to-end tests
+npm run test:e2e -- --ui          # watch the tests run, step by step
+```
+
+## CI/CD
+
+GitHub Actions (`.github/workflows/`):
+
+- **CI** runs on every push and pull request: lint, a security audit of the app's
+  dependencies, and the end-to-end tests on Linux and Windows with Node 22 and 24.
+  If tests fail, the Playwright report is attached to the run.
+- **Release** runs when you push a version tag. It runs CI, then publishes a GitHub
+  Release with a zip of the app. To release:
+  1. Update `"version"` in `package.json` (e.g. `0.2.0`) and commit it.
+  2. `git tag v0.2.0` then `git push origin v0.2.0`
+
+  Deploying to a server will be added here once the app is hosted (PLAN.md Phase 6).
+

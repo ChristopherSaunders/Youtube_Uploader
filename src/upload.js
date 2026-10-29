@@ -2,7 +2,6 @@
 // to YouTube in the background while the browser polls for progress.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -14,7 +13,7 @@ import { getAuthorizedClient, isExpiredSignIn, RECONNECT_MESSAGE } from './auth.
 import { getAccountWithToken, markNeedsReconnect } from './accounts.js';
 import { uploadVideoResumable } from './resumable.js';
 
-const TEMP_DIR = path.join(os.tmpdir(), 'youtube-uploader');
+const TEMP_DIR = config.uploadTempDir;
 fs.rmSync(TEMP_DIR, { recursive: true, force: true }); // leftovers from a crash
 fs.mkdirSync(TEMP_DIR, { recursive: true });
 

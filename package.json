@@ -11,7 +11,10 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/server.js",
     "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
-    "keygen": "node scripts/keygen.js"
+    "keygen": "node scripts/keygen.js",
+    "lint": "eslint .",
+    "test:e2e": "playwright test",
+    "test": "npm run lint && npm run test:e2e"
   },
   "dependencies": {
     "busboy": "^1.6.0",
@@ -19,5 +22,11 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "googleapis": "^182.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0"
   }
 }

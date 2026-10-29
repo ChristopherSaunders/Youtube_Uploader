@@ -1,0 +1,67 @@
+# Runs on every push and pull request: lint, a dependency security check, and
+# the Playwright end-to-end tests on Linux and Windows.
+name: CI
+
+on:
+  push:
+    branches: ['**'] # tags are handled by the release workflow
+  pull_request:
+  workflow_call: # reused by the release workflow
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run lint
+
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # Only what the app ships with; fails on high or critical advisories.
+      - run: npm install --no-fund --omit=dev
+      - run: npm audit --omit=dev --audit-level=high
+
+  e2e:
+    name: E2E (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report-${{ matrix.os }}-node${{ matrix.node }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

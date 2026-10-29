@@ -1,5 +1,7 @@
 // All environment-specific settings live here so the same code runs locally
 // and, later, hosted online. Nothing else should read process.env directly.
+import os from 'node:os';
+import path from 'node:path';
 import dotenv from 'dotenv';
 
 dotenv.config({ quiet: true });
@@ -63,4 +65,6 @@ export default {
   databasePath: process.env.DATABASE_PATH || 'data/app.db',
   maxUploadMb,
   maxUploadBytes: maxUploadMb * 1024 * 1024,
+  // Videos wait here between the browser upload and the YouTube upload.
+  uploadTempDir: process.env.UPLOAD_TEMP_DIR || path.join(os.tmpdir(), 'youtube-uploader'),
 };
