@@ -27,9 +27,10 @@ with Playwright on Linux and Windows.
   asks YouTube how much arrived and continues from there, with exponential backoff.
 - **Live two-step progress.** Browser → app, then app → YouTube. You can close the
   page once the second step starts.
-- **Expired sign-ins handled gracefully.** The app checks a channel's sign-in before
-  sending a large file. If it expires mid-upload, the video is kept so it can be
-  retried after reconnecting, without sending it again.
+- **Expired sign-ins caught early.** When the page opens (and when you come back to
+  the tab), the app checks every channel's sign-in and flags any that need
+  reconnecting. It checks again before sending a large file, and if a sign-in
+  expires mid-upload, the video is kept so it can be retried after reconnecting.
 - **Upload history** with links to each video and YouTube Studio.
 - **Light and dark mode**, and a layout that works on phones.
 

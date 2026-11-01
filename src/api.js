@@ -27,6 +27,22 @@ router.get('/accounts', (req, res) => {
   res.json(listAccounts(req.user.id));
 });
 
+// Checks every connected channel's sign-in (the page does this when it opens),
+// so a channel that needs reconnecting is flagged before anyone tries to upload.
+// A failed check that isn't an expired sign-in (e.g. no internet) leaves the
+// channel's status as it was.
+router.post('/accounts/check', async (req, res) => {
+  const accounts = listAccounts(req.user.id).map((account) => getAccountWithToken(req.user.id, account.id));
+  await Promise.all(
+    accounts.map((account) =>
+      checkSignIn(account).catch((err) => {
+        console.warn(`Could not check "${account.channel_title}":`, err.message);
+      }),
+    ),
+  );
+  res.json(listAccounts(req.user.id));
+});
+
 // Called before sending a video, so an expired sign-in shows up straight away
 // instead of after the whole file has been sent.
 router.post('/accounts/:id/check', async (req, res) => {

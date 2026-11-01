@@ -79,8 +79,22 @@ function renderAccounts(accounts) {
   }
 
   const previous = accountSelect.value;
+  const expired = accounts.filter((account) => account.needs_reconnect);
+  const notice = $('reconnect-notice');
+  notice.hidden = expired.length === 0;
+  notice.textContent =
+    expired.length === 1
+      ? `${expired[0].channel_title} needs to be reconnected before you can upload to it.`
+      : `${expired.length} channels need to be reconnected before you can upload to them.`;
+
   accountSelect.replaceChildren(
-    ...accounts.map((account) => new Option(account.channel_title, account.id)),
+    ...accounts.map(
+      (account) =>
+        new Option(
+          account.needs_reconnect ? `${account.channel_title} (reconnect needed)` : account.channel_title,
+          account.id,
+        ),
+    ),
   );
   if (accounts.some((account) => String(account.id) === previous)) accountSelect.value = previous;
 
@@ -97,6 +111,25 @@ async function loadAccounts() {
     showFlash('error', err.message);
   }
 }
+
+// Asks Google whether each channel's saved sign-in still works, so expired
+// ones are flagged before an upload is attempted. Runs when the page opens and
+// when you come back to the tab (at most once a minute).
+const RECHECK_MS = 60 * 1000;
+let lastCheck = 0;
+
+async function checkAccounts() {
+  lastCheck = Date.now();
+  try {
+    renderAccounts(await api('/accounts/check', { method: 'POST' }));
+  } catch {
+    // The upload itself still checks the chosen channel; nothing to show here.
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - lastCheck >= RECHECK_MS) checkAccounts();
+});
 
 async function disconnect(account, button) {
   if (!confirm(`Disconnect "${account.channel_title}"? You can reconnect it any time.`)) return;
@@ -461,5 +494,5 @@ if (params.has('connected')) showFlash('success', `Connected ${params.get('conne
 if (params.has('error')) showFlash('error', params.get('error'));
 if (params.size) history.replaceState(null, '', '/');
 
-loadAccounts();
+loadAccounts().then(checkAccounts);
 loadHistory();

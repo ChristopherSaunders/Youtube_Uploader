@@ -81,3 +81,49 @@ test('lets you reconnect and retry when the sign-in expires mid-upload', async (
   expect(uploads).toHaveLength(1);
   expect(uploads[0].sha256).toBe(sha256(file.buffer));
 });
+
+test('flags a channel that needs reconnecting as soon as the page opens', async ({ page, request }) => {
+  await setGoogle(request, { expired: true });
+  await page.reload();
+
+  await expect(page.locator('#reconnect-notice')).toHaveText(
+    'Neighbour Please Podcast needs to be reconnected before you can upload to it.',
+  );
+  await expect(page.locator('.account-handle')).toHaveText('Connection expired');
+  await expect(page.getByRole('link', { name: 'Reconnect' })).toBeVisible();
+  await expect(page.getByLabel('Channel').locator('option')).toHaveText([
+    'Neighbour Please Podcast (reconnect needed)',
+  ]);
+  expect((await youtubeReceived(request)).uploads).toHaveLength(0);
+
+  // Once Google accepts the sign-in again, the warning clears by itself.
+  await setGoogle(request, { expired: false });
+  await page.reload();
+  await expect(page.locator('.account-handle')).toHaveText('@neighbourpleasepodcast');
+  await expect(page.locator('#reconnect-notice')).toBeHidden();
+  await expect(page.getByLabel('Channel').locator('option')).toHaveText(['Neighbour Please Podcast']);
+});
+
+test('checks again when you come back to the tab, at most once a minute', async ({ page, request }) => {
+  await page.clock.install();
+  await page.reload();
+  await expect(page.locator('.account-handle')).toHaveText('@neighbourpleasepodcast');
+
+  const comeBackToTab = () => page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  let checks = 0;
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && req.url().endsWith('/api/accounts/check')) checks += 1;
+  });
+
+  await setGoogle(request, { expired: true });
+  await comeBackToTab(); // too soon after the last check: skipped
+  await page.clock.fastForward('00:30');
+  await comeBackToTab(); // still under a minute: skipped
+  expect(checks).toBe(0);
+
+  await page.clock.fastForward('00:31');
+  await comeBackToTab();
+  await expect(page.locator('.account-handle')).toHaveText('Connection expired');
+  await expect(page.locator('#reconnect-notice')).toBeVisible();
+  expect(checks).toBe(1);
+});

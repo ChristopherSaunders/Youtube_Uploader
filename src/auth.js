@@ -44,6 +44,7 @@ export const RECONNECT_MESSAGE =
 export async function checkSignIn(account) {
   try {
     await getAuthorizedClient(account).getAccessToken();
+    markNeedsReconnect(account.id, false);
     return { ok: true };
   } catch (err) {
     if (!isExpiredSignIn(err)) throw err;

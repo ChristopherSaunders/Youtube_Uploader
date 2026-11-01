@@ -44,8 +44,8 @@ export function updateRefreshToken(accountId, refreshToken) {
   ).run(encrypt(refreshToken), accountId);
 }
 
-export function markNeedsReconnect(accountId) {
-  db.prepare('UPDATE accounts SET needs_reconnect = 1 WHERE id = ?').run(accountId);
+export function markNeedsReconnect(accountId, needsReconnect = true) {
+  db.prepare('UPDATE accounts SET needs_reconnect = ? WHERE id = ?').run(needsReconnect ? 1 : 0, accountId);
 }
 
 export function deleteAccount(userId, accountId) {
